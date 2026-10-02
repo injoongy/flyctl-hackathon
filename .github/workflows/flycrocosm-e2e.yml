@@ -1,0 +1,72 @@
+# =============================================================================
+# Flycrocosm E2E — copy to .github/workflows/ in a component repo (ui-ex, flyctl).
+#
+# Trigger: a maintainer adds the "flycrocosm" label to a same-repo PR. Remove and
+# re-add the label to re-run. Nothing runs automatically on push, because the run
+# executes PR code inside the Flycrocosm cluster.
+#
+# Runs on the self-hosted runner that lives on the Flycrocosm host (labels:
+# self-hosted, flycrocosm). That host holds the cluster, the Flycrocosm checkout
+# at /work/flycrocosm, and a logged-in Claude Code (or CLAUDE_CODE_OAUTH_TOKEN below).
+#
+# Posts two PR comments: the plan before testing, and the result (with recording)
+# after. Both are updated in place on re-runs. Not a required check.
+#
+# Repository secrets (optional): CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY
+# Repository variables (optional): E2E_MODEL, E2E_MEDIA (+ its E2E_MEDIA_* settings)
+# =============================================================================
+
+name: Flycrocosm E2E
+
+on:
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  # One cluster: runs queue, and only the newest pending one is kept.
+  group: flycrocosm-e2e
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # git-branch media publishing on public repos; read is enough otherwise
+  pull-requests: write
+
+jobs:
+  e2e:
+    name: Test on Flycrocosm
+    if: >-
+      github.event.label.name == 'flycrocosm'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, flycrocosm]
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      E2E_MODEL: ${{ vars.E2E_MODEL }}
+      E2E_GITHUB_ORG: ${{ github.repository_owner }}
+      E2E_MEDIA: ${{ vars.E2E_MEDIA }}
+      E2E_MEDIA_S3_URI: ${{ vars.E2E_MEDIA_S3_URI }}
+      E2E_MEDIA_PUBLIC_BASE: ${{ vars.E2E_MEDIA_PUBLIC_BASE }}
+      FLYCROCOSM: ${{ vars.FLYCROCOSM_DIR || '/work/flycrocosm' }}
+
+    steps:
+      - name: Run on Flycrocosm
+        id: run
+        run: |
+          set +e
+          "$FLYCROCOSM/e2e/run.sh" --repo "${{ github.event.repository.name }}" \
+            --pr "${{ github.event.pull_request.number }}" --post --out "$RUNNER_TEMP/e2e-out"
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: flycrocosm-e2e-pr${{ github.event.pull_request.number }}-${{ github.run_number }}
+          path: ${{ runner.temp }}/e2e-out
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Fail on a failing test
+        if: steps.run.outputs.code == '1'
+        run: exit 1
