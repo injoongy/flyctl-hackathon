@@ -49,9 +49,9 @@ browser-based authentication.
 			Name:        "restricted",
 			Description: "Save org tokens with limited permissions instead of a full user token",
 		},
-		flag.StringSlice{
+		flag.String{
 			Name:        "org",
-			Description: "With --restricted, organization slugs to grant access to",
+			Description: "With --restricted, comma-separated organization slugs to grant access to",
 		},
 		flag.String{
 			Name:        "mask",

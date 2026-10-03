@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	fly "github.com/superfly/fly-go"
+	"github.com/superfly/flyctl/internal/config"
+	"github.com/superfly/flyctl/internal/flag"
 	"github.com/superfly/flyctl/internal/flyutil"
 	"github.com/superfly/macaroon"
 	"github.com/superfly/macaroon/flyio"
@@ -29,6 +32,23 @@ func TestParseMask(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestLoginRestrictedFlagsLoadConfig(t *testing.T) {
+	dir := logoutTestDir(t)
+	cmd := newLogin()
+	require.NoError(t, cmd.ParseFlags([]string{
+		"--restricted",
+		"--org",
+		"acme, personal",
+		"--mask",
+		"r",
+	}))
+
+	ctx := flag.NewContext(t.Context(), cmd.Flags())
+	_, err := config.Load(ctx, filepath.Join(dir, "config.yml"))
+	require.NoError(t, err)
+	require.Equal(t, "acme, personal", flag.GetString(ctx, "org"))
+}
+
 func TestOrgsBySlug(t *testing.T) {
 	orgs := []fly.Organization{
 		{
@@ -42,7 +62,7 @@ func TestOrgsBySlug(t *testing.T) {
 		},
 	}
 
-	selected, err := orgsBySlug(orgs, []string{"acme", "jane-doe"})
+	selected, err := orgsBySlug(orgs, []string{"acme", " jane-doe"})
 	require.NoError(t, err)
 	require.Equal(t, "b", selected[0].ID)
 	require.Equal(t, "a", selected[1].ID)

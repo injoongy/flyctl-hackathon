@@ -103,8 +103,8 @@ func selectRestrictedOrgs(
 	ctx context.Context,
 	orgs []fly.Organization,
 ) ([]fly.Organization, error) {
-	if slugs := flag.GetStringSlice(ctx, "org"); len(slugs) > 0 {
-		return orgsBySlug(orgs, slugs)
+	if slugs := flag.GetString(ctx, "org"); slugs != "" {
+		return orgsBySlug(orgs, strings.Split(slugs, ","))
 	}
 
 	options := make([]string, 0, len(orgs))
@@ -148,6 +148,7 @@ func orgsBySlug(
 
 	selected := make([]fly.Organization, 0, len(slugs))
 	for _, slug := range slugs {
+		slug = strings.TrimSpace(slug)
 		org, ok := bySlug[slug]
 		if !ok {
 			return nil, fmt.Errorf("organization %s not found", slug)
